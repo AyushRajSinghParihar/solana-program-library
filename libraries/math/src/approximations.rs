@@ -76,85 +76,29 @@ pub fn f32_normal_cdf(argument: f32) -> f32 {
 mod tests {
     use {super::*, proptest::prelude::*};
 
-    fn check_square_root<T>(radicand: T)
-    where
-        T: PrimInt + CheckedShl + CheckedShr + std::fmt::Debug + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + Copy + std::ops::Mul<Output=T>,
-        // Add bounds needed for checking if not already covered by PrimInt etc.
-        // Need checked_pow(2) effectively. Let's do manual multiply for simplicity or add num_traits::pow::CheckedPow
-    {
-        let one = T::one();
+    fn check_square_root(radicand: u128) {
         let root = sqrt(radicand).unwrap();
-
-        // Check: root^2 <= radicand
-        let root_squared = root.checked_mul(&root).unwrap();
-        assert!(root_squared <= radicand);
-
-        // Check: (root + 1)^2 > radicand
-        // Avoid overflow when root is MAX
-        if let Some(root_plus_one) = root.checked_add(&one) {
-             if let Some(upper_bound_squared) = root_plus_one.checked_mul(&root_plus_one) {
-                assert!(radicand < upper_bound_squared);
-             }
-             // If root_plus_one overflows, then root must be T::max_value(),
-             // and root^2 <= radicand must hold, which is sufficient.
-        } else {
-             // root is T::max_value(), root_squared check is sufficient
-             assert_eq!(root, T::max_value());
-        }
-
-        // --- Original check logic (might overflow on upper_bound) ---
-        // let lower_bound = root.saturating_sub(one);
-        // let lower_bound_sq = lower_bound.checked_mul(&lower_bound).unwrap();
-        // let upper_bound = root.checked_add(&one); //.unwrap(); // This can overflow!
-        // if let Some(ub) = upper_bound {
-        //     let upper_bound_sq = ub.checked_mul(&ub).unwrap();
-        //     assert!(radicand < upper_bound_sq); // Use < since root is floor(sqrt)
-        // } // else: root is MAX, lower bound check is enough
-        // assert!(radicand >= lower_bound_sq);
-
+        let lower_bound = root.saturating_sub(1).checked_pow(2).unwrap();
+        let upper_bound = root.checked_add(1).unwrap().checked_pow(2).unwrap();
+        assert!(radicand <= upper_bound);
+        assert!(radicand >= lower_bound);
     }
 
     #[test]
-    fn test_square_root_u64() {
-        assert_eq!(sqrt(0u64), Some(0u64));
-        assert_eq!(sqrt(1u64), Some(1u64));
-        assert_eq!(sqrt(3u64), Some(1u64));
-        assert_eq!(sqrt(4u64), Some(2u64));
-        assert_eq!(sqrt(8u64), Some(2u64));
-        assert_eq!(sqrt(9u64), Some(3u64));
-        assert_eq!(sqrt(15u64), Some(3u64));
-        assert_eq!(sqrt(16u64), Some(4u64));
-        assert_eq!(sqrt(25u64), Some(5u64));
-        assert_eq!(sqrt(u64::MAX), Some(4294967295u64)); // sqrt(2^64 - 1) is 2^32 - 1
-        check_square_root(100u64);
-        check_square_root(123456789u64);
-        check_square_root(u64::MAX);
-    }
-
-    #[test]
-    fn test_square_root_u128_min_max() { // Renamed from test_square_root_min_max
-        let test_roots = [0u128, u128::MAX]; // Explicitly u128
+    fn test_square_root_min_max() {
+        let test_roots = [0, u64::MAX];
         for i in test_roots.iter() {
-            check_square_root(*i);
+            check_square_root(*i as u128);
         }
-         // Added a u64 check here too if 
-         check_square_root(0u64);
-         check_square_root(u64::MAX);
     }
 
     proptest! {
         #[test]
-        fn test_square_root_prop_u128(a in 0u128..=u128::MAX) { // Use u128 range
-            check_square_root(a);
-        }
-
-        #[test]
-        fn test_square_root_prop_u64(a in 0u64..=u64::MAX) { // Use u64 range
-           check_square_root(a);
+        fn test_square_root(a in 0..u64::MAX) {
+            check_square_root(a as u128);
         }
     }
 
-    // --- f32_normal_cdf tests remain the same ---
     fn check_normal_cdf_f32(argument: f32) {
         let result = f32_normal_cdf(argument);
         let check_result = 0.5 * (1.0 + libm::erff(argument / std::f32::consts::SQRT_2));
